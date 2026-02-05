@@ -1,0 +1,76 @@
+ ---
+name: re-ioc-extraction
+description: Extract and normalize defensive IOCs (domains, IPs, URLs, file hashes, mutexes, registry paths, file paths, user agents) from analyst-provided evidence such as strings output, sandbox logs, network logs, or reverse engineering notes. Use when the user wants IOCs for detection, blocking, hunting, or reporting.
+---
+
+# re-ioc-extraction
+
+## Purpose
+Produce a clean, defensible IOC set from provided evidence **without inventing indicators**. This skill supports defensive workflows (detection engineering, IR reporting, hunting).
+
+## Inputs expected
+The user should provide one or more of:
+- Strings output (e.g., `strings`, FLOSS, extracted config)
+- Sandbox / execution logs
+- Network logs (DNS/HTTP/proxy, PCAP summaries, Zeek)
+- Reverse engineering notes (observed constants, decrypted config, function summaries)
+- Hashes already computed by the analyst
+
+If no evidence is provided, ask for the evidence source(s) before proceeding.
+
+## Non-negotiable rules
+1) **No hallucinations:** only output indicators explicitly present in the evidence.
+2) If incomplete/ambiguous (e.g., `hxxp://`, partial domains, truncated hashes), label **candidate / incomplete** and state what’s missing.
+3) **No live validation:** do not resolve domains, visit URLs, or test infrastructure. Extraction and normalization only.
+4) Every IOC must be **traceable**: include a short evidence snippet and the source (strings/log/notes).
+
+## IOC types to extract
+- Hashes: MD5 / SHA1 / SHA256
+- Network: domains/subdomains, IPs (v4/v6), URLs, URI paths, ports, SNI/Host if present
+- Email addresses (if present)
+- File system: dropped file names, file paths
+- Windows persistence: registry keys/values, services, scheduled tasks (names/paths if present)
+- Mutex names
+- User-Agent strings
+- Process names / command lines (only if explicitly present)
+- Certificates/keys (subjects/thumbprints/public keys) if explicitly present
+
+## Normalization rules
+- Domains: lowercase, strip surrounding punctuation, keep subdomains
+- URLs: preserve as-seen; if obfuscated (`hxxp`), include both obfuscated and normalized forms
+- IPs: normalize formatting; preserve IPv6
+- Hashes: lowercase; do not “fix” length or guess missing characters
+- Paths/registry: preserve exactly as provided; do not guess missing segments
+- De-duplicate values but keep distinct contexts in evidence notes
+
+## Confidence labels
+- **confirmed**: complete, unambiguous indicator
+- **candidate**: likely relevant but incomplete/templated/ambiguous
+- **contextual**: useful hunting context but not an indicator by itself (use sparingly)
+
+## Output (always produce both)
+### A) IOC table (Markdown)
+Columns:
+- Type
+- Indicator
+- Confidence
+- Context (short phrase)
+- Evidence (short snippet)
+
+### B) Structured IOC list (YAML)
+Group by type; each entry includes:
+- value
+- confidence
+- source
+- evidence_snippet
+
+## Minimal clarification questions (only if required; max 1–3)
+- Which evidence source is authoritative if they conflict (strings vs sandbox vs notes)?
+- Do you want output optimized for a target (blocklist, SIEM query, report appendix)?
+- Keep obfuscated forms only, or include both obfuscated + normalized?
+
+## Definition of done
+- Every IOC is traceable to evidence (source + snippet).
+- No invented indicators.
+- Deduped + normalized + confidence-labeled.
+- Both table + YAML produced.
