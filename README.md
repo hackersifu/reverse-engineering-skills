@@ -24,6 +24,39 @@ If your agent environment supports a user-level skills directory, you can symlin
 
 Tip: If you’re unsure, start with the project-local approach. It’s the easiest to share and the easiest to reason about.
 
+## Usage
+### Via LLM Directly (no Codex required)
+
+You can test a skill with ChatGPT (or any LLM) even without Codex.
+
+Important: A chat model cannot read files from your local disk. To “point to the skill”, you must either:
+- paste the contents of the skill’s `SKILL.md` into the chat, or
+- provide a link to the `SKILL.md` file in this repo (and use a model/tool that can open links).
+
+### Quick test: re-ioc-extraction
+
+1) Open the skill file:
+   - `.agents/skills/re-ioc-extraction/SKILL.md`
+
+2) Copy the full contents of `SKILL.md` and paste it into your chat.
+
+3) Then paste this prompt:
+
+Follow the instructions in the skill text above.
+Extract IOCs from this evidence and output:
+1) a Markdown table (Type, Indicator, Confidence, Context, Evidence)
+2) a YAML list grouped by type
+
+Evidence:
+- hxxp://evil[.]test/login
+- https://example.bad/p/a?x=1
+- 8.8.8.8
+- 44d88612fea8a8f36de82e1278abb02f
+- Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Updater
+- Global\\MutexExample
+
+
+
 ## Skill layout
 
 Skills in this repo live under:
