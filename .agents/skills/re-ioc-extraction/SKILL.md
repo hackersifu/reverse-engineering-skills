@@ -21,6 +21,19 @@ If no evidence is provided, ask for the evidence source(s) before proceeding.
 ## Optional evidence generation (static only)
 If the user has a local sample and wants help generating evidence for IOC extraction, suggest static commands and ask them to paste the outputs back into the chat. Do not execute the sample.
 
+### Tool availability check (recommended)
+Before suggesting commands, check what is installed:
+
+- `command -v file strings sha256sum sha1sum md5sum capa || true`
+
+If a tool is missing:
+- Prefer installing the missing tool(s) if the environment allows it.
+- Otherwise use the fallbacks below.
+
+Note (AWS CloudShell): CloudShell uses Amazon Linux 2023 and the package manager is `dnf`.
+If `strings`/`objdump` are missing, installing `binutils` typically provides them:
+- `sudo dnf install -y binutils`
+
 ### strings (baseline)
 Goal: extract embedded strings that may include URLs/domains/paths/registry keys.
 
@@ -28,6 +41,9 @@ Goal: extract embedded strings that may include URLs/domains/paths/registry keys
   - `strings -a "<sample>" | head -n 2000`
 - Windows (Sysinternals Strings):
   - `strings.exe -nobanner -accepteula "<sample>"`
+
+Fallback if `strings` is not available (targeted search):
+- `rg -a -n "(http|https|hxxp|[0-9]{1,3}(\\.[0-9]{1,3}){3}|[A-Za-z0-9.-]+\\.[A-Za-z]{2,}|Software\\\\|HKEY_|User-Agent:)" "<sample>"`
 
 Tip: If output is large, ask the user to paste:
 - the top N lines, and
@@ -80,6 +96,7 @@ Then proceed with extraction per the non-negotiable rules and output:
 2) If incomplete/ambiguous (e.g., `hxxp://`, partial domains, truncated hashes), label **candidate / incomplete** and state what’s missing.
 3) **No live validation:** do not resolve domains, visit URLs, or test infrastructure. Extraction and normalization only.
 4) Every IOC must be **traceable**: include a short evidence snippet and the source (strings/log/notes).
+5) **Stay on scope:** do not inspect unrelated environment files (shell dotfiles, configs) unless explicitly requested. Focus on the sample and provided evidence.
 
 ## IOC types to extract
 - Hashes: MD5 / SHA1 / SHA256
@@ -105,6 +122,10 @@ Then proceed with extraction per the non-negotiable rules and output:
 - **candidate**: likely relevant but incomplete/templated/ambiguous
 - **contextual**: useful hunting context but not an indicator by itself (use sparingly)
 
+Guidance:
+- If an indicator appears only in license text, vendor credits, documentation, or generic reference strings (e.g., "Licensed to...", "Copyright...", vendor URLs),
+  prefer **contextual** unless corroborated by execution/network/config evidence.
+
 ## Output (always produce both)
 ### A) IOC table (Markdown)
 Columns:
@@ -113,6 +134,11 @@ Columns:
 - Confidence
 - Context (short phrase)
 - Evidence (short snippet)
+
+Formatting rules:
+- Keep each table row on a single line (no embedded newlines in cells).
+- Truncate Evidence to ~120 characters (append `…`) if needed.
+- Escape `|` characters in Evidence/Context as `\|`.
 
 ### B) Structured IOC list (YAML)
 Group by type; each entry includes:
@@ -131,4 +157,3 @@ Group by type; each entry includes:
 - No invented indicators.
 - Deduped + normalized + confidence-labeled.
 - Both table + YAML produced.
-
