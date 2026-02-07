@@ -1,4 +1,3 @@
-```markdown
 # reverse-engineering-skills
 
 A public collection of **agent skills** for **defensive reverse engineering** and malware analysis workflows.
@@ -50,6 +49,8 @@ Important: a chat model cannot read files from your local disk. To “point to t
 - provide a link to the `SKILL.md` file in this repo (and use a model/tool that can open links).
 
 ### Quick test: re-ioc-extraction
+Skill file: [re-ioc-extraction](./.agents/skills/re-ioc-extraction/SKILL.md)
+
 
 1) Open the skill file:
    - `.agents/skills/re-ioc-extraction/SKILL.md`
@@ -66,14 +67,18 @@ Extract IOCs from this evidence and output:
 1) a Markdown table (Type, Indicator, Confidence, Context, Evidence)
 2) a YAML list grouped by type
 
-Evidence Example Types:
-- URL
-- Domains
-- IPs
-- Hash (MD5/SHA1/SHA256)
-- Registry key/value
-- File path
-- Mutex
+Evidence (synthetic placeholders — do not invent values):
+- URL: <url-placeholder>
+- Domain: <domain-placeholder>
+- IP: <ip-placeholder>
+- Hash: <hash-placeholder>
+- Registry key/value: <registry-placeholder>
+- File path: <file-path-placeholder>
+- Mutex: <mutex-placeholder>
+
+Rules for this test:
+- Do not create or guess any indicator values.
+- Only classify what is explicitly present in the evidence placeholders above.
 
 #### Proposed prompts (additional quick checks)
 
@@ -86,9 +91,10 @@ Follow the instructions in the skill text above.
 Extract IOCs from this evidence and output the table + YAML.
 
 Evidence:
-- hxxps://login[.]evil
-- 2f7c3b1a9e
+- hxxps://<partial-domain-placeholder>
+- <truncated-hash-placeholder>
 - Software\\Microsoft\\Windows\\CurrentVersion\\Run\\
+
 
 ## Usage via agent tooling (Codex/other)
 
@@ -124,4 +130,3 @@ Guidelines:
 ## License
 
 MIT (see `LICENSE`).
-```
