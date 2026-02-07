@@ -1,3 +1,4 @@
+```markdown
 ---
 name: re-ioc-extraction
 description: Extract and normalize defensive IOCs (domains, IPs, URLs, file hashes, mutexes, registry paths, file paths, user agents) from analyst-provided evidence such as strings output, sandbox logs, network logs, or reverse engineering notes. Use when the user wants IOCs for detection, blocking, hunting, or reporting.
@@ -78,27 +79,55 @@ Goal: compute MD5/SHA1/SHA256 (as available) for an artifact table.
   - `certutil -hashfile "<sample>" MD5`
 
 ### capa (required *when available*)
-Goal: get static capability classification (persistence, crypto, C2 patterns, etc.) that may provide context for extraction.
+Goal: get static capability classification that can add context for extraction (capabilities, ATT&CK/MBC mappings, etc.).
 If `capa` is installed, **attempt capa and include its output as evidence/context**.
 
-**Rule-set requirement:** capa typically needs a rule set (e.g., `capa-rules`) provided via `-r`. :contentReference[oaicite:1]{index=1}
+**Important:** capa depends on a rule set (typically `capa-rules`). The standard rule set lives in the `mandiant/capa-rules` repo, and rule metadata (like `scopes`) must be compatible with the capa version you’re running. The repo has examples using `dynamic: span of calls`, while newer capa documentation examples show `dynamic: call`, which can break if you mix an older capa binary with newer rules. :contentReference[oaicite:0]{index=0}
 
-1) Determine rules path (prefer in this order):
+#### 1) Verify capa is runnable
+- `capa --version`
+
+If `capa` is present but fails at runtime (e.g., GLIBC errors), prefer installing capa via pip in a venv for CloudShell-like environments.
+
+#### 2) Locate (or fetch) capa rules
+Determine rules path (prefer in this order):
 - If `$CAPA_RULES_DIR` is set and exists, use it.
+- Else if `./tools/capa-rules` exists (common for repos vendoring rules), use it.
 - Else if `./capa-rules` exists, use it.
 - Else if `~/capa-rules` exists, use it.
-- Else: instruct the user to obtain the rules repo and re-run (do not proceed with capa without rules):
-  - `git clone --depth 1 https://github.com/mandiant/capa-rules.git ~/capa-rules` :contentReference[oaicite:2]{index=2}
+- Else fetch:
+  - `git clone --depth 1 https://github.com/mandiant/capa-rules.git ~/capa-rules`
 
-2) Run capa with JSON output:
+#### 3) Version-compatibility guard (recommended)
+If you have to use an older capa (e.g., 7.x on Python 3.9), do **not** use `capa-rules` `master` blindly.
+Instead, use a rules snapshot/tag that matches your capa version when possible:
+- `git -C "<rules_dir>" tag | tail -n 20`
+- If a matching tag exists (e.g., `v7.4.0`), export it to a temp directory and run from there:
+  - `rm -rf /tmp/capa-rules-<tag> && mkdir -p /tmp/capa-rules-<tag>`
+  - `git -C "<rules_dir>" archive <tag> | tar -x -C /tmp/capa-rules-<tag>`
+  - set `rules_dir=/tmp/capa-rules-<tag>`
+
+Rationale: the capa README’s rule examples show supported `scopes` values (e.g., `dynamic: call`), and mismatched rules can throw rule-validation errors. :contentReference[oaicite:1]{index=1}
+
+#### 4) Run capa (prefer JSON)
+Base command:
 - `capa -r "<rules_dir>" -j "<sample>"`
 
-3) If capa errors (missing rules, unsupported format, etc.):
+CloudShell stability tweaks (recommended):
+- set cache to a writable short-lived location:
+  - `XDG_CACHE_HOME=/tmp capa -r "<rules_dir>" -j "<sample>"`
+
+If capa complains about signatures (common when FLIRT signatures aren’t present), pass an empty signatures directory:
+- `mkdir -p /tmp/capa-empty-sigs`
+- `XDG_CACHE_HOME=/tmp capa -r "<rules_dir>" -s /tmp/capa-empty-sigs -j "<sample>"`
+
+#### 5) If capa errors
+If capa errors (missing rules, incompatible rules, unsupported format, etc.):
 - capture and include the exact error text as evidence
 - continue IOC extraction from other evidence sources (strings/hashes/file), but **note capa was unavailable**.
 
 ### What to do with outputs
-Ask the user to paste one or more outputs (strings, file type, hashes, capa) as evidence.
+Ask the user to paste one or more outputs (strings, file type, hashes, capa JSON) as evidence.
 Then proceed with extraction per the non-negotiable rules and output:
 - IOC table (Markdown)
 - Structured IOC list (YAML)
@@ -135,8 +164,7 @@ Then proceed with extraction per the non-negotiable rules and output:
 - **contextual**: useful hunting context but not an indicator by itself (use sparingly)
 
 Guidance:
-- If an indicator appears only in license text, vendor credits, documentation, or generic reference strings (e.g., "Licensed to...", "Copyright...", vendor URLs),
-  prefer **contextual** unless corroborated by execution/network/config evidence.
+- If an indicator appears only in license text, vendor credits, documentation, or generic reference strings, prefer **contextual** unless corroborated by execution/network/config evidence.
 
 ## Output (always produce both)
 ### A) IOC table (Markdown)
@@ -169,3 +197,4 @@ Group by type; each entry includes:
 - No invented indicators.
 - Deduped + normalized + confidence-labeled.
 - Both table + YAML produced.
+```
