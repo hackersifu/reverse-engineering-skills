@@ -1,3 +1,4 @@
+```markdown
 # reverse-engineering-skills
 
 A public collection of **agent skills** for **defensive reverse engineering** and malware analysis workflows.
@@ -24,39 +25,6 @@ If your agent environment supports a user-level skills directory, you can symlin
 
 Tip: If you’re unsure, start with the project-local approach. It’s the easiest to share and the easiest to reason about.
 
-## Usage
-### Via LLM Directly (no Codex required)
-
-You can test a skill with ChatGPT (or any LLM) even without Codex.
-
-Important: A chat model cannot read files from your local disk. To “point to the skill”, you must either:
-- paste the contents of the skill’s `SKILL.md` into the chat, or
-- provide a link to the `SKILL.md` file in this repo (and use a model/tool that can open links).
-
-### Quick test: re-ioc-extraction
-
-1) Open the skill file:
-   - `.agents/skills/re-ioc-extraction/SKILL.md`
-
-2) Copy the full contents of `SKILL.md` and paste it into your chat.
-
-3) Then paste this prompt:
-
-Follow the instructions in the skill text above.
-Extract IOCs from this evidence and output:
-1) a Markdown table (Type, Indicator, Confidence, Context, Evidence)
-2) a YAML list grouped by type
-
-Evidence:
-- hxxp://evil[.]test/login
-- https://example.bad/p/a?x=1
-- 8.8.8.8
-- 44d88612fea8a8f36de82e1278abb02f
-- Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Updater
-- Global\\MutexExample
-
-
-
 ## Skill layout
 
 Skills in this repo live under:
@@ -70,10 +38,59 @@ Each skill folder is meant to be standalone and may also include optional suppor
 ### Reverse engineering
 
 | Skill | What it’s for |
-|------|----------------|
+| --- | --- |
 | **re-ioc-extraction** | Extract and normalize defensive IOCs (domains, IPs, URLs, hashes, mutexes, registry paths, file paths, user agents) from analyst-provided evidence (strings output, logs, RE notes). Produces a traceable IOC table plus a structured list suitable for reporting and detection workflows. |
 
-## Usage
+## Usage via LLM directly (no Codex required)
+
+You can test a skill with ChatGPT (or any LLM) even without Codex.
+
+Important: a chat model cannot read files from your local disk. To “point to the skill”, you must either:
+- paste the contents of the skill’s `SKILL.md` into the chat, or
+- provide a link to the `SKILL.md` file in this repo (and use a model/tool that can open links).
+
+### Quick test: re-ioc-extraction
+
+1) Open the skill file:
+   - `.agents/skills/re-ioc-extraction/SKILL.md`
+
+2) Paste the **entire** `SKILL.md` contents into your chat (this is the skill).  
+   The model cannot read your local `.agents/...` path.
+
+3) Then paste the prompt below.
+
+#### Proposed prompt (normal evidence case)
+
+Follow the instructions in the skill text above.
+Extract IOCs from this evidence and output:
+1) a Markdown table (Type, Indicator, Confidence, Context, Evidence)
+2) a YAML list grouped by type
+
+Evidence Example Types:
+- URL
+- Domains
+- IPs
+- Hash (MD5/SHA1/SHA256)
+- Registry key/value
+- File path
+- Mutex
+
+#### Proposed prompts (additional quick checks)
+
+**No evidence provided (should ask for evidence):**
+Follow the instructions in the skill text above.
+Extract IOCs.
+
+**Partial / ambiguous indicators (should label candidate / incomplete and not “complete” them):**
+Follow the instructions in the skill text above.
+Extract IOCs from this evidence and output the table + YAML.
+
+Evidence:
+- hxxps://login[.]evil
+- 2f7c3b1a9e
+- Software\\Microsoft\\Windows\\CurrentVersion\\Run\\
+
+## Usage via agent tooling (Codex/other)
 
 Most agent systems will choose a skill based on the request and the skill’s metadata. You can also invoke it explicitly, for example:
 
@@ -107,3 +124,4 @@ Guidelines:
 ## License
 
 MIT (see `LICENSE`).
+```
