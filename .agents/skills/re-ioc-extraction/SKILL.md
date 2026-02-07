@@ -1,4 +1,4 @@
- ---
+---
 name: re-ioc-extraction
 description: Extract and normalize defensive IOCs (domains, IPs, URLs, file hashes, mutexes, registry paths, file paths, user agents) from analyst-provided evidence such as strings output, sandbox logs, network logs, or reverse engineering notes. Use when the user wants IOCs for detection, blocking, hunting, or reporting.
 ---
@@ -17,6 +17,63 @@ The user should provide one or more of:
 - Hashes already computed by the analyst
 
 If no evidence is provided, ask for the evidence source(s) before proceeding.
+
+## Optional evidence generation (static only)
+If the user has a local sample and wants help generating evidence for IOC extraction, suggest static commands and ask them to paste the outputs back into the chat. Do not execute the sample.
+
+### strings (baseline)
+Goal: extract embedded strings that may include URLs/domains/paths/registry keys.
+
+- macOS/Linux:
+  - `strings -a "<sample>" | head -n 2000`
+- Windows (Sysinternals Strings):
+  - `strings.exe -nobanner -accepteula "<sample>"`
+
+Tip: If output is large, ask the user to paste:
+- the top N lines, and
+- any lines around suspicious hits (URLs/domains/registry paths).
+
+### file (type/format context)
+Goal: capture file type (PE/ELF/script), which helps interpret strings and other artifacts.
+
+- macOS/Linux:
+  - `file "<sample>"`
+
+Note: `file` identifies format/type; it does **not** compute hashes.
+
+### hashes (for reporting / dedupe)
+Goal: compute MD5/SHA1/SHA256 (as available) for an artifact table.
+
+- macOS:
+  - `shasum -a 256 "<sample>"`
+  - `shasum -a 1 "<sample>"`
+  - `md5 "<sample>"`
+- Linux:
+  - `sha256sum "<sample>"`
+  - `sha1sum "<sample>"`
+  - `md5sum "<sample>"`
+- Windows (PowerShell):
+  - `Get-FileHash "<sample>" -Algorithm SHA256`
+  - `Get-FileHash "<sample>" -Algorithm SHA1`
+  - `Get-FileHash "<sample>" -Algorithm MD5`
+- Windows (cmd):
+  - `certutil -hashfile "<sample>" SHA256`
+  - `certutil -hashfile "<sample>" SHA1`
+  - `certutil -hashfile "<sample>" MD5`
+
+### capa (static capability hints)
+Goal: get static capability classification (persistence, crypto, C2 patterns, etc.) that may provide context for extraction.
+
+- basic:
+  - `capa "<sample>"`
+- JSON output (easier to parse):
+  - `capa -j "<sample>"`
+
+### What to do with outputs
+Ask the user to paste one or more outputs (strings, file type, hashes, capa) as evidence.
+Then proceed with extraction per the non-negotiable rules and output:
+- IOC table (Markdown)
+- Structured IOC list (YAML)
 
 ## Non-negotiable rules
 1) **No hallucinations:** only output indicators explicitly present in the evidence.
@@ -74,3 +131,4 @@ Group by type; each entry includes:
 - No invented indicators.
 - Deduped + normalized + confidence-labeled.
 - Both table + YAML produced.
+

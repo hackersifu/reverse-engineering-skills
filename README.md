@@ -4,6 +4,24 @@ A public collection of **agent skills** for **defensive reverse engineering** an
 
 The goal: make common RE tasks more repeatable and easier to operationalize by packaging them as small, composable skills with clear inputs, outputs, and guardrails.
 
+## Prerequisites (Codex users)
+
+If you plan to use these skills with **OpenAI Codex**, you’ll need one of the supported Codex clients:
+
+- **Codex CLI** (terminal): https://developers.openai.com/codex/cli/
+- **Codex app** (desktop): https://developers.openai.com/codex/app/
+- (Optional overview) Codex quickstart: https://developers.openai.com/codex/quickstart/
+
+Codex discovers skills from folders like:
+
+    .agents/skills/<skill-name>/SKILL.md
+
+Skills documentation (how discovery + loading works):  
+https://developers.openai.com/codex/skills/
+
+Note: if you add or update skills and they don’t appear in Codex, restart the Codex client you’re using (CLI session, app, or IDE).
+
+
 ## Installation
 
 ### Use in a project (recommended)
