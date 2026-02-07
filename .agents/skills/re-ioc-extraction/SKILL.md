@@ -77,13 +77,25 @@ Goal: compute MD5/SHA1/SHA256 (as available) for an artifact table.
   - `certutil -hashfile "<sample>" SHA1`
   - `certutil -hashfile "<sample>" MD5`
 
-### capa (static capability hints)
+### capa (required *when available*)
 Goal: get static capability classification (persistence, crypto, C2 patterns, etc.) that may provide context for extraction.
+If `capa` is installed, **attempt capa and include its output as evidence/context**.
 
-- basic:
-  - `capa "<sample>"`
-- JSON output (easier to parse):
-  - `capa -j "<sample>"`
+**Rule-set requirement:** capa typically needs a rule set (e.g., `capa-rules`) provided via `-r`. :contentReference[oaicite:1]{index=1}
+
+1) Determine rules path (prefer in this order):
+- If `$CAPA_RULES_DIR` is set and exists, use it.
+- Else if `./capa-rules` exists, use it.
+- Else if `~/capa-rules` exists, use it.
+- Else: instruct the user to obtain the rules repo and re-run (do not proceed with capa without rules):
+  - `git clone --depth 1 https://github.com/mandiant/capa-rules.git ~/capa-rules` :contentReference[oaicite:2]{index=2}
+
+2) Run capa with JSON output:
+- `capa -r "<rules_dir>" -j "<sample>"`
+
+3) If capa errors (missing rules, unsupported format, etc.):
+- capture and include the exact error text as evidence
+- continue IOC extraction from other evidence sources (strings/hashes/file), but **note capa was unavailable**.
 
 ### What to do with outputs
 Ask the user to paste one or more outputs (strings, file type, hashes, capa) as evidence.
