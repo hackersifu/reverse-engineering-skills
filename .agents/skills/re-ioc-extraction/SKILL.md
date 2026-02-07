@@ -1,4 +1,3 @@
-```markdown
 ---
 name: re-ioc-extraction
 description: Extract and normalize defensive IOCs (domains, IPs, URLs, file hashes, mutexes, registry paths, file paths, user agents) from analyst-provided evidence such as strings output, sandbox logs, network logs, or reverse engineering notes. Use when the user wants IOCs for detection, blocking, hunting, or reporting.
@@ -197,4 +196,3 @@ Group by type; each entry includes:
 - No invented indicators.
 - Deduped + normalized + confidence-labeled.
 - Both table + YAML produced.
-```
