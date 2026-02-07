@@ -24,7 +24,7 @@ If the user has a local sample and wants help generating evidence for IOC extrac
 ### Tool availability check (recommended)
 Before suggesting commands, check what is installed:
 
-- `command -v file strings sha256sum sha1sum md5sum capa || true`
+- `command -v file strings sha256sum sha1sum md5sum capa jq || true`
 
 If a tool is missing:
 - Prefer installing the missing tool(s) if the environment allows it.
@@ -77,53 +77,76 @@ Goal: compute MD5/SHA1/SHA256 (as available) for an artifact table.
   - `certutil -hashfile "<sample>" SHA1`
   - `certutil -hashfile "<sample>" MD5`
 
-### capa (required *when available*)
-Goal: get static capability classification that can add context for extraction (capabilities, ATT&CK/MBC mappings, etc.).
-If `capa` is installed, **attempt capa and include its output as evidence/context**.
+### capa (use when available; degrade gracefully)
+Goal: get static capability classification that adds context for extraction (capabilities, ATT&CK/MBC mappings, packer hints, etc.).
+If `capa` is installed and runnable, **attempt capa and include its output as evidence/context**.
 
-**Important:** capa depends on a rule set (typically `capa-rules`). The standard rule set lives in the `mandiant/capa-rules` repo, and rule metadata (like `scopes`) must be compatible with the capa version you’re running. The repo has examples using `dynamic: span of calls`, while newer capa documentation examples show `dynamic: call`, which can break if you mix an older capa binary with newer rules. :contentReference[oaicite:0]{index=0}
+Key realities (from real-world runs):
+- capa usually **requires an external ruleset** (`capa-rules`) via `-r`.
+- capa **version must match rules** reasonably well. Mixing an older capa with newer rules can fail due to rule metadata/scopes changes.
+- Some environments need runtime tweaks (`XDG_CACHE_HOME`) or signature handling (`-s`).
 
 #### 1) Verify capa is runnable
 - `capa --version`
 
-If `capa` is present but fails at runtime (e.g., GLIBC errors), prefer installing capa via pip in a venv for CloudShell-like environments.
+If `capa` exists but fails to run (e.g., GLIBC errors on a prebuilt binary), install via pip in a venv (CloudShell-friendly):
+- `python3 -m venv ~/.venvs/capa && source ~/.venvs/capa/bin/activate`
+- `python -m pip install --upgrade pip`
+- `python -m pip install flare-capa`
+- `capa --version`
 
-#### 2) Locate (or fetch) capa rules
-Determine rules path (prefer in this order):
-- If `$CAPA_RULES_DIR` is set and exists, use it.
-- Else if `./tools/capa-rules` exists (common for repos vendoring rules), use it.
-- Else if `./capa-rules` exists, use it.
-- Else if `~/capa-rules` exists, use it.
-- Else fetch:
-  - `git clone --depth 1 https://github.com/mandiant/capa-rules.git ~/capa-rules`
+#### 2) Ensure capa rules exist and are discoverable
+Prefer a configured rules directory, set once:
+- `export CAPA_RULES_DIR="$HOME/capa-rules"`
 
-#### 3) Version-compatibility guard (recommended)
-If you have to use an older capa (e.g., 7.x on Python 3.9), do **not** use `capa-rules` `master` blindly.
-Instead, use a rules snapshot/tag that matches your capa version when possible:
-- `git -C "<rules_dir>" tag | tail -n 20`
-- If a matching tag exists (e.g., `v7.4.0`), export it to a temp directory and run from there:
-  - `rm -rf /tmp/capa-rules-<tag> && mkdir -p /tmp/capa-rules-<tag>`
-  - `git -C "<rules_dir>" archive <tag> | tar -x -C /tmp/capa-rules-<tag>`
-  - set `rules_dir=/tmp/capa-rules-<tag>`
+Persist it (optional):
+- `echo 'export CAPA_RULES_DIR=$HOME/capa-rules' >> ~/.bashrc`
 
-Rationale: the capa README’s rule examples show supported `scopes` values (e.g., `dynamic: call`), and mismatched rules can throw rule-validation errors. :contentReference[oaicite:1]{index=1}
+Locate rules directory in this order:
+1) `$CAPA_RULES_DIR` (if set + exists)
+2) `./tools/capa-rules` (vendored alongside the repo)
+3) `./capa-rules`
+4) `~/capa-rules`
+5) Fetch if missing:
+   - `git clone --depth 1 https://github.com/mandiant/capa-rules.git ~/capa-rules`
 
-#### 4) Run capa (prefer JSON)
-Base command:
+Quick check:
+- `test -d "$CAPA_RULES_DIR" && echo "CAPA_RULES_DIR ok" || echo "CAPA_RULES_DIR missing"`
+
+#### 3) Guard against rules/version mismatch (recommended)
+If you’re pinned to an older capa (e.g., 7.x on Python 3.9), don’t rely on the rules repo HEAD.
+Instead, use a rules snapshot/tag that matches your capa version when possible.
+
+- List tags:
+  - `git -C "$CAPA_RULES_DIR" tag | tail -n 30`
+
+If a matching tag exists (example: `v7.4.0`), export it to a temporary directory and run from that:
+- `tmpdir=$(mktemp -d /tmp/capa-rules-v7.4.0-XXXXXX)`
+- `git -C "$CAPA_RULES_DIR" archive v7.4.0 | tar -x -C "$tmpdir"`
+- `rules_dir="$tmpdir"`
+
+If no matching tag exists, proceed with `$CAPA_RULES_DIR` but be prepared for validation errors.
+
+#### 4) Run capa (prefer JSON), with stability tweaks
+Base JSON run:
 - `capa -r "<rules_dir>" -j "<sample>"`
 
 CloudShell stability tweaks (recommended):
-- set cache to a writable short-lived location:
+- cache to a writable short-lived location:
   - `XDG_CACHE_HOME=/tmp capa -r "<rules_dir>" -j "<sample>"`
 
 If capa complains about signatures (common when FLIRT signatures aren’t present), pass an empty signatures directory:
 - `mkdir -p /tmp/capa-empty-sigs`
 - `XDG_CACHE_HOME=/tmp capa -r "<rules_dir>" -s /tmp/capa-empty-sigs -j "<sample>"`
 
+Tip: Save JSON to a file so it can be parsed reliably:
+- `XDG_CACHE_HOME=/tmp capa -r "<rules_dir>" -s /tmp/capa-empty-sigs -j "<sample>" > /tmp/sample.capa.json`
+- `jq -r '.rules | keys[]' /tmp/sample.capa.json | sort -u`
+
 #### 5) If capa errors
 If capa errors (missing rules, incompatible rules, unsupported format, etc.):
-- capture and include the exact error text as evidence
-- continue IOC extraction from other evidence sources (strings/hashes/file), but **note capa was unavailable**.
+- capture and include the exact error text as evidence/context
+- continue IOC extraction from other evidence sources (strings/hashes/file), but **explicitly note capa was unavailable** (and why)
 
 ### What to do with outputs
 Ask the user to paste one or more outputs (strings, file type, hashes, capa JSON) as evidence.
