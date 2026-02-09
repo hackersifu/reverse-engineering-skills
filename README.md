@@ -4,6 +4,24 @@ A public collection of **agent skills** for **defensive reverse engineering** an
 
 The goal: make common RE tasks more repeatable and easier to operationalize by packaging them as small, composable skills with clear inputs, outputs, and guardrails.
 
+## Prerequisites (Codex users)
+
+If you plan to use these skills with **OpenAI Codex**, you’ll need one of the supported Codex clients:
+
+- **Codex CLI** (terminal): https://developers.openai.com/codex/cli/
+- **Codex app** (desktop): https://developers.openai.com/codex/app/
+- (Optional overview) Codex quickstart: https://developers.openai.com/codex/quickstart/
+
+Codex discovers skills from folders like:
+
+    .agents/skills/<skill-name>/SKILL.md
+
+Skills documentation (how discovery + loading works):  
+https://developers.openai.com/codex/skills/
+
+Note: if you add or update skills and they don’t appear in Codex, restart the Codex client you’re using (CLI session, app, or IDE).
+
+
 ## Installation
 
 ### Use in a project (recommended)
@@ -37,10 +55,66 @@ Each skill folder is meant to be standalone and may also include optional suppor
 ### Reverse engineering
 
 | Skill | What it’s for |
-|------|----------------|
+| --- | --- |
 | **re-ioc-extraction** | Extract and normalize defensive IOCs (domains, IPs, URLs, hashes, mutexes, registry paths, file paths, user agents) from analyst-provided evidence (strings output, logs, RE notes). Produces a traceable IOC table plus a structured list suitable for reporting and detection workflows. |
 
-## Usage
+## Usage via LLM directly (no Codex required)
+
+You can test a skill with ChatGPT (or any LLM) even without Codex.
+
+Important: a chat model cannot read files from your local disk. To “point to the skill”, you must either:
+- paste the contents of the skill’s `SKILL.md` into the chat, or
+- provide a link to the `SKILL.md` file in this repo (and use a model/tool that can open links).
+
+### Quick test: re-ioc-extraction
+Skill file: [re-ioc-extraction](./.agents/skills/re-ioc-extraction/SKILL.md)
+
+
+1) Open the skill file:
+   - `.agents/skills/re-ioc-extraction/SKILL.md`
+
+2) Paste the **entire** `SKILL.md` contents into your chat (this is the skill).  
+   The model cannot read your local `.agents/...` path.
+
+3) Then paste the prompt below.
+
+#### Proposed prompt (normal evidence case)
+
+Follow the instructions in the skill text above.
+Extract IOCs from this evidence and output:
+1) a Markdown table (Type, Indicator, Confidence, Context, Evidence)
+2) a YAML list grouped by type
+
+Evidence (synthetic placeholders — do not invent values):
+- URL: <url-placeholder>
+- Domain: <domain-placeholder>
+- IP: <ip-placeholder>
+- Hash: <hash-placeholder>
+- Registry key/value: <registry-placeholder>
+- File path: <file-path-placeholder>
+- Mutex: <mutex-placeholder>
+
+Rules for this test:
+- Do not create or guess any indicator values.
+- Only classify what is explicitly present in the evidence placeholders above.
+
+#### Proposed prompts (additional quick checks)
+
+**No evidence provided (should ask for evidence):**
+Follow the instructions in the skill text above.
+Extract IOCs.
+
+**Partial / ambiguous indicators (should label candidate / incomplete and not “complete” them):**
+Follow the instructions in the skill text above.
+Extract IOCs from this evidence and output the table + YAML.
+
+Evidence:
+- hxxps://<partial-domain-placeholder>
+- <truncated-hash-placeholder>
+- Software\\Microsoft\\Windows\\CurrentVersion\\Run\\
+
+
+## Usage via agent tooling (Codex/other)
 
 Most agent systems will choose a skill based on the request and the skill’s metadata. You can also invoke it explicitly, for example:
 
@@ -55,13 +129,7 @@ This repo is oriented toward **defensive** and **analyst-in-the-loop** work:
 - Skills should avoid inventing indicators or “filling in gaps” with guesses.
 - Skills should not include instructions intended to enable wrongdoing.
 
-If you find a place where a skill’s wording could be misused, please open an issue.
-
-## Trophy case / field results
-
-Have you used these skills to produce useful detection content, a report appendix, or a validated IOC set?
-
-Open an issue with a short write-up (sanitized when needed). Links to public write-ups and case studies can be listed here over time.
+If you find a place where a skill’s wording could be misused, please open an issue. PRs are also welcome.
 
 ## Contributing
 
