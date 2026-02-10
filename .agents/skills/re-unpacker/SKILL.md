@@ -34,6 +34,7 @@ If you want the skill to guide evidence generation, say so and include your envi
 - **Evidence-first**: claims about “packed”, “UPX”, “Themida”, etc. must be tied to provided evidence (tool output, section names, signatures, entropy, imports, runtime telemetry).
 - **Do not invent artifacts**: if you did not see a dump/unpacked file, do not claim you produced one.
 - **Command hygiene**: prefer small, single-purpose commands; avoid long one-liners that are likely to fail on quoting.
+- **No evasion guidance**: do not suggest disabling EDR, bypassing sandbox controls, or tampering with instrumentation.
 
 ## Output requirements
 Return:
@@ -53,6 +54,75 @@ Use one of: `confirmed | high | medium | low | contextual`
 - `high/medium/low`: reasoned judgment with supporting evidence; note limitations.
 - `contextual`: relevant but not diagnostic (e.g., suspicious filename).
 
+---
+
+## Codex compatibility notes (important)
+Users may be running different Codex clients/versions. This skill must work under these constraints:
+
+- If the environment **can run commands**, keep commands **small and reviewable**, and ask for approval before running installs.
+- If the environment **cannot run commands** (or command execution is disabled), fall back to: “please run X locally and paste the output.”
+- Do not assume slash commands exist. Prefer plain instructions like “run `codex --version` if available” rather than `/help`.
+
+When available, gather:
+- Codex client version: `codex --version` (if command exists)
+- OS + shell: `uname -a` (or `ver` on Windows), and `echo $SHELL` if relevant
+
+---
+
+## Lean tool bootstrap (optional, but improves success)
+This skill can **check for** and **suggest installing** a lean set of tools. It must:
+- prefer OS package managers when possible
+- avoid long one-liners
+- never install anything without explicit user approval
+- record tool presence/versions as evidence when provided
+
+### Minimal tool set (lean)
+**Baseline (recommended):**
+- `file`, `strings`, `objdump` (or `readelf`), `sha256sum`/`shasum`, `md5sum`/`md5`
+
+**High-value optional (still lean):**
+- `diec` (Detect It Easy command-line) for packer/signature hints
+- `upx` for known UPX-packed samples (only use `upx -d` if evidence indicates UPX)
+- `floss` for higher-quality strings extraction
+- `capa` for before/after unpack comparison
+
+> References: Detect It Easy provides `diec` CLI; capa and FLOSS are available as standalone releases and/or Python packages. citeturn0search3turn0search9turn0search6
+
+### Step 0 — Tool check (safe)
+Run (or ask the user to run) one check command:
+
+**POSIX shells (Linux/macOS):**
+- `command -v file strings objdump sha256sum shasum md5sum md5 upx diec floss capa yara || true`
+
+**Windows (PowerShell):**
+- `Get-Command file, strings, objdump, sha256sum, upx, diec, floss, capa, yara -ErrorAction SilentlyContinue`
+
+### Step 0b — Suggested installs (only if missing; user must approve)
+Choose the smallest applicable path:
+
+**Ubuntu/Debian (apt):**
+- `sudo apt-get update`
+- `sudo apt-get install -y file binutils coreutils upx-ucl yara`
+
+**Fedora/RHEL-like (dnf):**
+- `sudo dnf install -y file binutils coreutils upx yara`
+
+**macOS (Homebrew):**
+- `brew install file-formula binutils upx yara`
+
+**Python-based tools (when OS packages aren’t available)**
+Use one of:
+- `python3 -m pip install --user flare-capa`  (capa) citeturn0search1turn0search5
+- `python3 -m pip install --user flare-floss` (FLOSS) citeturn0search2turn0search6
+
+**Windows (Chocolatey, if present):**
+- `choco install -y die upx yara`
+(If Chocolatey isn’t available, provide manual install guidance at a high level.)
+
+> NOTE: FLOSS requires a newer Python; if Python is too old, prefer using the FLOSS standalone release instead of pip-installing. citeturn0search2
+
+---
+
 ## Procedure
 
 ### Step 1 — Establish a safe baseline (always)
@@ -60,7 +130,8 @@ Use one of: `confirmed | high | medium | low | contextual`
 - Identify the sample and compute hashes.
 
 **Preferred evidence (paste outputs):**
-- `sha256sum "<sample>" && sha1sum "<sample>" && md5sum "<sample>"`
+- `sha256sum "<sample>" && sha1sum "<sample>" && md5sum "<sample>"`  
+  (macOS: `shasum -a 256 "<sample>"` and `md5 "<sample>"`)
 - `file "<sample>"`
 
 ### Step 2 — Static triage for packing indicators
@@ -71,9 +142,11 @@ Look for **multiple independent signals**:
 - Short repetitive fragments
 - Encrypted/config blobs without surrounding context
 
-Commands (Linux):
+Commands (POSIX):
 - `strings -a "<sample>" | head -n 200`
 - `strings -el "<sample>" | head -n 200`  (UTF-16)
+Optional (if installed):
+- `floss "<sample>" | head -n 200`
 
 **B) Sections**
 - Unusual section names (random-looking, single huge section, missing typical sections)
@@ -88,9 +161,10 @@ Commands:
 - Minimal imports; heavy reliance on `LoadLibrary/GetProcAddress` (Windows) or `dlsym` (Linux)
 - Presence of anti-debug/anti-VM APIs (contextual, not definitive)
 
-**D) Signature tooling (optional)**
-If you have them: Detect It Easy (DIE), peframe, floss, capa.
-- If you paste outputs, I will interpret them and cite them.
+**D) Signature tooling (optional, lean)**
+If installed:
+- `diec "<sample>"` (or `diec -j "<sample>"` if JSON is supported in your build)
+- `capa "<sample>"` (or `capa -j "<sample>"` if using JSON output)
 
 ### Step 3 — Decide the unpacking approach (static-first)
 #### 3.1 If it looks like a known packer with a clean static unpack path
@@ -103,13 +177,15 @@ Example: UPX, some self-extracting formats.
   - imports become more realistic
   - hashes change (expected)
 
-> If the evidence indicates UPX specifically, I may suggest `upx -d` in a controlled environment, but I will not assume UPX without evidence.
+**UPX case (only if evidence supports UPX)**
+- Attempt: `upx -d "<sample>" -o "<sample>.unpacked"`
+- Validate with Step 2 commands again on `<sample>.unpacked`.
 
 #### 3.2 If static unpack is not feasible → dynamic/sandbox-only path
 This path requires:
 - an isolated VM/sandbox snapshot you can revert
 - no credentials, no sensitive mounts, no production network
-- ideally an instrumented sandbox (e.g., CAPE/any.run/VM + monitoring)
+- ideally an instrumented sandbox
 
 Dynamic unpacking signals to look for:
 - RWX memory allocations followed by execution
@@ -122,8 +198,6 @@ Dynamic unpacking signals to look for:
 - Identify when the sample transitions from stub → payload.
 - Dump memory region(s) containing the payload **only if your tooling supports it safely**.
 - Extract dumped PE and validate with offline tooling.
-
-> I will not provide instructions to disable defenses, bypass EDR, or evade analysis.
 
 ### Step 4 — Validate unpacking success (evidence-driven)
 Success criteria (at least two):
@@ -138,12 +212,14 @@ If you produced an unpacked/dumped artifact, capture:
 - hashes
 - how to reproduce
 
+---
+
 ## Unpacking report format (what I will output)
 
 ### Packing assessment
 - **Verdict**: packed/likely packed/unclear
 - **Confidence**: <value>
-- **Why (evidence excerpts)**:
+- **Why (verbatim evidence excerpts)**:
   - <excerpt 1>
   - <excerpt 2>
 
@@ -170,7 +246,7 @@ If you produced an unpacked/dumped artifact, capture:
 - Extract config (if present) using static methods where possible.
 
 ## Definition of done
-- A defensible packing assessment with evidence excerpts.
+- A defensible packing assessment with verbatim evidence excerpts.
 - A prioritized unpacking plan that respects safety constraints.
 - If an unpacked artifact exists: hashes + provenance + validation notes.
 - Clear next steps for downstream defensive analysis.
