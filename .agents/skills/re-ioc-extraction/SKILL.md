@@ -6,171 +6,93 @@ description: Extract and normalize defensive IOCs (domains, IPs, URLs, file hash
 # re-ioc-extraction
 
 ## Purpose
-Produce a clean, defensible IOC set from provided evidence **without inventing indicators**. This skill supports defensive workflows (detection engineering, IR reporting, hunting).
+Produce a complete, **defensive IOC set** from analyst-provided evidence and present it in:
+1) a Markdown IOC table, and  
+2) a structured YAML list,  
+with **traceable evidence only** (no guessing, no enrichment, no validation).
 
 ## Inputs expected
-The user should provide one or more of:
-- Strings output (e.g., `strings`, FLOSS, extracted config)
-- Sandbox / execution logs
-- Network logs (DNS/HTTP/proxy, PCAP summaries, Zeek)
-- Reverse engineering notes (observed constants, decrypted config, function summaries)
-- Hashes already computed by the analyst
+Provide at least one of the following (more is better):
+- `strings` output (ASCII and/or UTF-16)
+- sandbox / EDR / detonation logs (process, file, registry, network)
+- packet/proxy/DNS logs or extracted HTTP requests
+- reverse engineering notes (imports, APIs, decompiled snippets, paths, config blobs)
+- known hashes from a trusted source
 
-If no evidence is provided, ask for the evidence source(s) before proceeding.
+If evidence is missing, the skill must still produce output for what is present and clearly note gaps.
 
 ## Optional evidence generation (static only)
-If the user has a local sample and wants help generating evidence for IOC extraction, suggest static commands and ask them to paste the outputs back into the chat. Do not execute the sample.
+If the user asks for help generating evidence locally (or you are explicitly allowed to run commands), prefer **small, single-purpose commands** that are hard to break and easy to copy/paste.
+
+### Command hygiene (important)
+- Prefer **one pattern per command** over long one-liners with many quoted arguments.
+- Avoid complex nested quotes. If a command needs heavy quoting, break it into multiple commands.
+- If a combined command fails (e.g., quoting/EOF errors), rerun as **several simple commands** and proceed.
 
 ### Tool availability check (recommended)
-Before suggesting commands, check what is installed:
-
-- `command -v file strings sha256sum sha1sum md5sum capa jq || true`
-
-If a tool is missing:
-- Prefer installing the missing tool(s) if the environment allows it.
-- Otherwise use the fallbacks below.
-
-Note (AWS CloudShell): CloudShell uses Amazon Linux 2023 and the package manager is `dnf`.
-If `strings`/`objdump` are missing, installing `binutils` typically provides them:
-- `sudo dnf install -y binutils`
-
-### strings (baseline)
-Goal: extract embedded strings that may include URLs/domains/paths/registry keys.
-
-- macOS/Linux:
-  - `strings -a "<sample>" | head -n 2000`
-- Windows (Sysinternals Strings):
-  - `strings.exe -nobanner -accepteula "<sample>"`
-
-Fallback if `strings` is not available (targeted search):
-- `rg -a -n "(http|https|hxxp|[0-9]{1,3}(\\.[0-9]{1,3}){3}|[A-Za-z0-9.-]+\\.[A-Za-z]{2,}|Software\\\\|HKEY_|User-Agent:)" "<sample>"`
-
-Tip: If output is large, ask the user to paste:
-- the top N lines, and
-- any lines around suspicious hits (URLs/domains/registry paths).
+```bash
+command -v file strings sha256sum sha1sum md5sum capa jq || true
+```
 
 ### file (type/format context)
-Goal: capture file type (PE/ELF/script), which helps interpret strings and other artifacts.
-
-- macOS/Linux:
-  - `file "<sample>"`
-
-Note: `file` identifies format/type; it does **not** compute hashes.
+```bash
+file "<sample>"
+```
 
 ### hashes (for reporting / dedupe)
-Goal: compute MD5/SHA1/SHA256 (as available) for an artifact table.
+```bash
+sha256sum "<sample>"
+sha1sum "<sample>"
+md5sum "<sample>"
+```
 
-- macOS:
-  - `shasum -a 256 "<sample>"`
-  - `shasum -a 1 "<sample>"`
-  - `md5 "<sample>"`
-- Linux:
-  - `sha256sum "<sample>"`
-  - `sha1sum "<sample>"`
-  - `md5sum "<sample>"`
-- Windows (PowerShell):
-  - `Get-FileHash "<sample>" -Algorithm SHA256`
-  - `Get-FileHash "<sample>" -Algorithm SHA1`
-  - `Get-FileHash "<sample>" -Algorithm MD5`
-- Windows (cmd):
-  - `certutil -hashfile "<sample>" SHA256`
-  - `certutil -hashfile "<sample>" SHA1`
-  - `certutil -hashfile "<sample>" MD5`
+### strings (baseline)
+```bash
+strings -a "<sample>" | head -n 2000
+```
+
+### strings (UTF-16 / wide strings on Windows malware)
+```bash
+strings -el "<sample>" | head -n 2000
+```
+
+### Searching extracted strings safely (recommended pattern)
+First save strings to a file, then search with **one pattern per command**:
+```bash
+strings -a "<sample>" > /tmp/sample.strings.txt
+strings -el "<sample>" > /tmp/sample.strings.utf16.txt
+
+rg -n -F "http://" /tmp/sample.strings.txt
+rg -n -F "https://" /tmp/sample.strings.txt
+rg -n -F ".onion" /tmp/sample.strings.txt
+rg -n -F "HKEY_" /tmp/sample.strings.utf16.txt
+rg -n -F "CurrentVersion\Run" /tmp/sample.strings.utf16.txt
+```
 
 ### capa (use when available; degrade gracefully)
-Goal: get static capability classification that adds context for extraction (capabilities, ATT&CK/MBC mappings, packer hints, etc.).
-If `capa` is installed and runnable, **attempt capa and include its output as evidence/context**.
-
-Key realities (from real-world runs):
-- capa usually **requires an external ruleset** (`capa-rules`) via `-r`.
-- capa **version must match rules** reasonably well. Mixing an older capa with newer rules can fail due to rule metadata/scopes changes.
-- Some environments need runtime tweaks (`XDG_CACHE_HOME`) or signature handling (`-s`).
-
-#### 1) Verify capa is runnable
-- `capa --version`
-
-If `capa` exists but fails to run (e.g., GLIBC errors on a prebuilt binary), install via pip in a venv (CloudShell-friendly):
-- `python3 -m venv ~/.venvs/capa && source ~/.venvs/capa/bin/activate`
-- `python -m pip install --upgrade pip`
-- `python -m pip install flare-capa`
-- `capa --version`
-
-#### 2) Ensure capa rules exist and are discoverable
-Prefer a configured rules directory, set once:
-- `export CAPA_RULES_DIR="$HOME/capa-rules"`
-
-Persist it (optional):
-- `echo 'export CAPA_RULES_DIR=$HOME/capa-rules' >> ~/.bashrc`
-
-Locate rules directory in this order:
-1) `$CAPA_RULES_DIR` (if set + exists)
-2) `./tools/capa-rules` (vendored alongside the repo)
-3) `./capa-rules`
-4) `~/capa-rules`
-5) Fetch if missing:
-   - `git clone --depth 1 https://github.com/mandiant/capa-rules.git ~/capa-rules`
-
-Quick check:
-- `test -d "$CAPA_RULES_DIR" && echo "CAPA_RULES_DIR ok" || echo "CAPA_RULES_DIR missing"`
-
-#### 3) Guard against rules/version mismatch (recommended)
-If you’re pinned to an older capa (e.g., 7.x on Python 3.9), don’t rely on the rules repo HEAD.
-Instead, use a rules snapshot/tag that matches your capa version when possible.
-
-- List tags:
-  - `git -C "$CAPA_RULES_DIR" tag | tail -n 30`
-
-If a matching tag exists (example: `v7.4.0`), export it to a temporary directory and run from that:
-- `tmpdir=$(mktemp -d /tmp/capa-rules-v7.4.0-XXXXXX)`
-- `git -C "$CAPA_RULES_DIR" archive v7.4.0 | tar -x -C "$tmpdir"`
-- `rules_dir="$tmpdir"`
-
-If no matching tag exists, proceed with `$CAPA_RULES_DIR` but be prepared for validation errors.
-
-#### 4) Run capa (prefer JSON), with stability tweaks
-Base JSON run:
-- `capa -r "<rules_dir>" -j "<sample>"`
-
-CloudShell stability tweaks (recommended):
-- cache to a writable short-lived location:
-  - `XDG_CACHE_HOME=/tmp capa -r "<rules_dir>" -j "<sample>"`
-
-If capa complains about signatures (common when FLIRT signatures aren’t present), pass an empty signatures directory:
-- `mkdir -p /tmp/capa-empty-sigs`
-- `XDG_CACHE_HOME=/tmp capa -r "<rules_dir>" -s /tmp/capa-empty-sigs -j "<sample>"`
-
-Tip: Save JSON to a file so it can be parsed reliably:
-- `XDG_CACHE_HOME=/tmp capa -r "<rules_dir>" -s /tmp/capa-empty-sigs -j "<sample>" > /tmp/sample.capa.json`
-- `jq -r '.rules | keys[]' /tmp/sample.capa.json | sort -u`
-
-#### 5) If capa errors
-If capa errors (missing rules, incompatible rules, unsupported format, etc.):
-- capture and include the exact error text as evidence/context
-- continue IOC extraction from other evidence sources (strings/hashes/file), but **explicitly note capa was unavailable** (and why)
-
-### What to do with outputs
-Ask the user to paste one or more outputs (strings, file type, hashes, capa JSON) as evidence.
-Then proceed with extraction per the non-negotiable rules and output:
-- IOC table (Markdown)
-- Structured IOC list (YAML)
+Use capa only as **supporting static context** (capabilities, packer/obfuscation hints). It does not directly produce IOCs.
+- If capa fails due to rule/signature mismatches, note it and continue with the evidence you do have.
+- If you have to pin rules, do so explicitly and record the rules version used in notes.
 
 ## Non-negotiable rules
 1) **No hallucinations:** only output indicators explicitly present in the evidence.
 2) If incomplete/ambiguous (e.g., `hxxp://`, partial domains, truncated hashes), label **candidate / incomplete** and state what’s missing.
 3) **No live validation:** do not resolve domains, visit URLs, or test infrastructure. Extraction and normalization only.
-4) Every IOC must be **traceable**: include a short evidence snippet and the source (strings/log/notes).
+4) Every IOC must be **traceable**: include a **verbatim** evidence snippet (exact line or tight excerpt) and the source artifact (strings/log/notes).
 5) **Stay on scope:** do not inspect unrelated environment files (shell dotfiles, configs) unless explicitly requested. Focus on the sample and provided evidence.
+6) **Do not “upgrade” indicators:** do not infer C2/persistence/stealer behavior into network IOCs unless the indicator values are present. Behavioral assessment is optional notes only.
 
 ## IOC types to extract
+Extract only what is present in evidence. Common types include:
 - Hashes: MD5 / SHA1 / SHA256
-- Network: domains/subdomains, IPs (v4/v6), URLs, URI paths, ports, SNI/Host if present
+- Network: domains/subdomains, IPs (v4/v6), URLs, URI paths, ports, SNI/Host headers if present
 - Email addresses (if present)
 - File system: dropped file names, file paths
-- Windows persistence: registry keys/values, services, scheduled tasks (names/paths if present)
+- Windows persistence: registry keys/values, services, scheduled task names/paths (only if values are present)
 - Mutex names
 - User-Agent strings
 - Process names / command lines (only if explicitly present)
-- Certificates/keys (subjects/thumbprints/public keys) if explicitly present
+- Certificates/keys: subjects, thumbprints, public keys (only if explicitly present)
 
 ## Normalization rules
 - Domains: lowercase, strip surrounding punctuation, keep subdomains
@@ -178,44 +100,161 @@ Then proceed with extraction per the non-negotiable rules and output:
 - IPs: normalize formatting; preserve IPv6
 - Hashes: lowercase; do not “fix” length or guess missing characters
 - Paths/registry: preserve exactly as provided; do not guess missing segments
-- De-duplicate values but keep distinct contexts in evidence notes
+- De-obfuscation: only apply mechanical transforms that are explicitly reversible and obvious (e.g., `hxxp`→`http`). Do not decode custom encodings unless the decoded value is shown in evidence.
 
 ## Confidence labels
-- **confirmed**: complete, unambiguous indicator
-- **candidate**: likely relevant but incomplete/templated/ambiguous
-- **contextual**: useful hunting context but not an indicator by itself (use sparingly)
-
-Guidance:
-- If an indicator appears only in license text, vendor credits, documentation, or generic reference strings, prefer **contextual** unless corroborated by execution/network/config evidence.
+Use a consistent, limited vocabulary:
+- **confirmed**: directly observed in authoritative output (hash tool output, explicit log lines)
+- **high / medium / low**: observed in evidence but context quality varies (e.g., noisy logs, partial correlation)
+- **contextual**: value is present but not inherently malicious (e.g., PDB path, product name, benign-looking file name)
+- **candidate**: looks like an IOC but may be incomplete/obfuscated/ambiguous
+- **incomplete**: truncated or partial value (state what is missing)
 
 ## Output (always produce both)
 ### A) IOC table (Markdown)
-Columns:
+Include columns:
 - Type
 - Indicator
 - Confidence
-- Context (short phrase)
-- Evidence (short snippet)
+- Context (short)
+- Evidence (verbatim snippet + where it came from)
 
-Formatting rules:
-- Keep each table row on a single line (no embedded newlines in cells).
-- Truncate Evidence to ~120 characters (append `…`) if needed.
-- Escape `|` characters in Evidence/Context as `\|`.
+Rules:
+- One indicator per row.
+- Evidence must be an **exact line or tight excerpt** containing the indicator (do not paraphrase).
+- If the same IOC appears in multiple sources, include the best/most authoritative snippet, and optionally list a second snippet in the context.
 
 ### B) Structured IOC list (YAML)
-Group by type; each entry includes:
-- value
-- confidence
-- source
-- evidence_snippet
+#### Schema (strict)
+Top-level keys (include only those that have entries):
+- `hashes`
+- `network`
+- `file_paths`
+- `file_names`
+- `process_names`
+- `registry`
+- `mutexes`
+- `user_agents`
+- `emails`
+- `certificates`
+- `notes` (optional)
+- `static_risk_notes` (optional; see below)
+
+Each list entry **must** include:
+- `value` (string)
+- `confidence` (one of: confirmed, high, medium, low, contextual, candidate, incomplete)
+- `source` (short label such as: "hash command output", "strings output", "UTF-16 strings output", "sandbox log", "network log", "RE notes")
+- `evidence_snippet` (verbatim line/excerpt containing the value)
+
+Additional required fields by type:
+- `hashes[]`: `algorithm` (md5|sha1|sha256)
+- `network[]`: `kind` (domain|ipv4|ipv6|url|uri_path|port|sni|host_header)  
+  - If `kind: port`, `value` must be a string like `"tcp/443"` or `"udp/53"` when protocol is known; otherwise `"port/443"`.
+- `registry[]`: `kind` (key|value|data) when known
+- `certificates[]`: `kind` (subject|thumbprint|public_key) when known
+
+Example (shape only):
+```yaml
+hashes:
+  - value: "..."
+    algorithm: "sha256"
+    confidence: "confirmed"
+    source: "hash command output"
+    evidence_snippet: "sha256sum sample -> ..."
+
+network:
+  - kind: "domain"
+    value: "example.com"
+    confidence: "high"
+    source: "sandbox log"
+    evidence_snippet: "DNS query: example.com"
+```
+
+## Optional: static risk notes (do not invent IOCs)
+If the user asks “is it malicious?” you may include a short `static_risk_notes` section in YAML (and/or a short paragraph after the IOC table) that:
+- cites the exact static evidence used (e.g., packing/obfuscation signs, capa capability names, suspicious API surface),
+- avoids definitive attribution,
+- never manufactures missing IOCs.
+
+Keep it brief and operational (what defenders should treat as risky and why).
 
 ## Minimal clarification questions (only if required; max 1–3)
-- Which evidence source is authoritative if they conflict (strings vs sandbox vs notes)?
-- Do you want output optimized for a target (blocklist, SIEM query, report appendix)?
-- Keep obfuscated forms only, or include both obfuscated + normalized?
+Ask only if needed to avoid incorrect extraction:
+- “Do you want only **confirmed** IOCs, or include **candidate/contextual** values too?”
+- “Is this evidence from **strings only** or do you have **sandbox/network logs** as well?”
+- “Do you want output optimized for a specific consumer (SIEM rule, EDR blocklist, report)?”
+
+## Happy path example (regression anchor)
+### Example evidence (input)
+```
+sha256sum sample.exe -> 1111111111111111111111111111111111111111111111111111111111111111
+sha1sum sample.exe   -> 2222222222222222222222222222222222222222
+md5sum sample.exe    -> 33333333333333333333333333333333
+
+strings:
+... hxxp://BadDomain[.]com/path/index.php
+... User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)
+... D:\Build\proj\bin\Release\sample.pdb
+```
+
+### Expected IOC table (output)
+| Type | Indicator | Confidence | Context | Evidence |
+|---|---|---|---|---|
+| sha256 | 1111111111111111111111111111111111111111111111111111111111111111 | confirmed | Sample hash | `sha256sum sample.exe -> 1111...1111` |
+| sha1 | 2222222222222222222222222222222222222222 | confirmed | Sample hash | `sha1sum sample.exe   -> 2222...2222` |
+| md5 | 33333333333333333333333333333333 | confirmed | Sample hash | `md5sum sample.exe    -> 3333...3333` |
+| url (obfuscated) | hxxp://BadDomain[.]com/path/index.php | candidate | Obfuscated URL in strings | `... hxxp://BadDomain[.]com/path/index.php` |
+| url | http://baddomain.com/path/index.php | candidate | Normalized from hxxp + [.] | `... hxxp://BadDomain[.]com/path/index.php` |
+| user_agent | Mozilla/5.0 (Windows NT 10.0; Win64; x64) | contextual | UA string in strings | `... User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)` |
+| file_path | D:\Build\proj\bin\Release\sample.pdb | contextual | Embedded build/debug path | `... D:\Build\proj\bin\Release\sample.pdb` |
+
+### Expected YAML (output)
+```yaml
+hashes:
+  - value: "1111111111111111111111111111111111111111111111111111111111111111"
+    algorithm: "sha256"
+    confidence: "confirmed"
+    source: "hash command output"
+    evidence_snippet: "sha256sum sample.exe -> 1111111111111111111111111111111111111111111111111111111111111111"
+  - value: "2222222222222222222222222222222222222222"
+    algorithm: "sha1"
+    confidence: "confirmed"
+    source: "hash command output"
+    evidence_snippet: "sha1sum sample.exe   -> 2222222222222222222222222222222222222222"
+  - value: "33333333333333333333333333333333"
+    algorithm: "md5"
+    confidence: "confirmed"
+    source: "hash command output"
+    evidence_snippet: "md5sum sample.exe    -> 33333333333333333333333333333333"
+
+network:
+  - kind: "url"
+    value: "hxxp://BadDomain[.]com/path/index.php"
+    confidence: "candidate"
+    source: "strings output"
+    evidence_snippet: "... hxxp://BadDomain[.]com/path/index.php"
+  - kind: "url"
+    value: "http://baddomain.com/path/index.php"
+    confidence: "candidate"
+    source: "strings output"
+    evidence_snippet: "... hxxp://BadDomain[.]com/path/index.php"
+
+user_agents:
+  - value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    confidence: "contextual"
+    source: "strings output"
+    evidence_snippet: "... User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+
+file_paths:
+  - value: "D:\\Build\\proj\\bin\\Release\\sample.pdb"
+    confidence: "contextual"
+    source: "strings output"
+    evidence_snippet: "... D:\Build\proj\bin\Release\sample.pdb"
+```
 
 ## Definition of done
-- Every IOC is traceable to evidence (source + snippet).
-- No invented indicators.
-- Deduped + normalized + confidence-labeled.
-- Both table + YAML produced.
+- Every indicator in the table is present in the evidence and has a verbatim snippet.
+- YAML conforms to the schema and uses only allowed confidence labels.
+- Normalization is applied without guessing missing values.
+- No live validation/enrichment was performed.
+- If the user asked about maliciousness, any risk notes are brief, evidence-cited, and do not invent IOCs.
