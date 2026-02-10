@@ -1,9 +1,9 @@
 ---
-name: re-unpacking-triage
+name: re-unpacker
 description: Identify packing/obfuscation indicators and guide a safe, analyst-in-the-loop unpacking workflow to recover a higher-fidelity sample for defensive analysis. Produces an unpacking plan and an unpacking report with traceable evidence.
 ---
 
-# re-unpacking-triage
+# re-unpacker
 
 ## Purpose
 Help a defender determine whether a sample appears packed/obfuscated and, if so, produce a **safe, repeatable unpacking plan** (static-first, optional dynamic only in a controlled sandbox) to recover a higher-fidelity artifact (e.g., dumped PE section(s) / unpacked executable) for downstream analysis and detection.
