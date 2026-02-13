@@ -2,11 +2,10 @@
 
 A public collection of **agent skills** for **defensive reverse engineering** and malware analysis workflows.
 
-The goal: make common RE tasks more repeatable and easier to operationalize by packaging them as small, composable skills with clear inputs, outputs, and guardrails.
 
 ## Prerequisites (Codex users)
 
-If you plan to use these skills with **OpenAI Codex**, you’ll need one of the supported Codex clients:
+For the skills designed for use with **OpenAI Codex**, you’ll need one of the supported Codex clients:
 
 - **Codex CLI** (terminal): https://developers.openai.com/codex/cli/
 - **Codex app** (desktop): https://developers.openai.com/codex/app/
@@ -21,7 +20,6 @@ https://developers.openai.com/codex/skills/
 
 Note: if you add or update skills and they don’t appear in Codex, restart the Codex client you’re using (CLI session, app, or IDE).
 
-
 ## Installation
 
 ### Use in a project (recommended)
@@ -32,6 +30,8 @@ Copy or vendor this repo’s skills into the repository where you want to use th
       .agents/
         skills/
           re-ioc-extraction/
+            SKILL.md
+          re-unpacker/
             SKILL.md
 
 If you prefer, you can also add this repo as a submodule and copy/symlink specific skill folders into `.agents/skills`.
@@ -48,15 +48,16 @@ Skills in this repo live under:
 
     .agents/skills/<skill-name>/SKILL.md
 
-Each skill folder is meant to be standalone and may also include optional supporting material (examples, references, scripts) as the collection grows.
+Each skill folder is meant to be standalone. As the collection grows, a skill may include optional supporting material (examples, references, scripts), but the **source of truth is always the SKILL.md contract**.
 
 ## Available skills
 
 ### Reverse engineering
 
-| Skill | What it’s for |
-| --- | --- |
-| **re-ioc-extraction** | Extract and normalize defensive IOCs (domains, IPs, URLs, hashes, mutexes, registry paths, file paths, user agents) from analyst-provided evidence (strings output, logs, RE notes). Produces a traceable IOC table plus a structured list suitable for reporting and detection workflows. |
+| Skill | What it’s for | Inputs | Outputs |
+| --- | --- | --- | --- |
+| **re-ioc-extraction** | Extract and normalize defensive IOCs (domains, IPs, URLs, hashes, mutexes, registry paths, file paths, user agents) from analyst-provided evidence. Evidence-first: **no invented indicators**. | strings output, sandbox/network logs, RE notes, known hashes | 1) IOC table (Markdown) 2) structured IOC list (YAML) |
+| **re-unpacker** | Triage packing/obfuscation indicators and produce a **static-first** unpacking plan (dynamic steps only in a controlled sandbox). Includes a lean tool check/install flow to improve success across environments. | file metadata, sections/imports/strings, (optional) sandbox notes | 1) packing assessment 2) unpacking plan 3) unpacking report (artifacts + provenance) 4) next steps |
 
 ## Usage via LLM directly (no Codex required)
 
@@ -69,16 +70,12 @@ Important: a chat model cannot read files from your local disk. To “point to t
 ### Quick test: re-ioc-extraction
 Skill file: [re-ioc-extraction](./.agents/skills/re-ioc-extraction/SKILL.md)
 
-
 1) Open the skill file:
    - `.agents/skills/re-ioc-extraction/SKILL.md`
 
-2) Paste the **entire** `SKILL.md` contents into your chat (this is the skill).  
-   The model cannot read your local `.agents/...` path.
+2) Paste the **entire** `SKILL.md` contents into your chat.
 
-3) Then paste the prompt below.
-
-#### Proposed prompt (normal evidence case)
+3) Paste the prompt:
 
 Follow the instructions in the skill text above.
 Extract IOCs from this evidence and output:
@@ -98,28 +95,42 @@ Rules for this test:
 - Do not create or guess any indicator values.
 - Only classify what is explicitly present in the evidence placeholders above.
 
-#### Proposed prompts (additional quick checks)
+### Quick test: re-unpacker
+Skill file: [re-unpacker](./.agents/skills/re-unpacker/SKILL.md)
 
-**No evidence provided (should ask for evidence):**
-Follow the instructions in the skill text above.
-Extract IOCs.
+1) Open the skill file:
+   - `.agents/skills/re-unpacker/SKILL.md`
 
-**Partial / ambiguous indicators (should label candidate / incomplete and not “complete” them):**
+2) Paste the **entire** `SKILL.md` contents into your chat.
+
+3) Paste the prompt:
+
 Follow the instructions in the skill text above.
-Extract IOCs from this evidence and output the table + YAML.
+I have a suspicious binary and want to know if it looks packed/obfuscated.
+If it is, provide:
+1) packing assessment summary (with verbatim evidence excerpts),
+2) a prioritized unpacking plan (static-first, sandbox-only dynamic if needed),
+3) an unpacking report (hashes + artifacts + provenance),
+4) next steps for defensive analysis.
 
 Evidence:
-- hxxps://<partial-domain-placeholder>
-- <truncated-hash-placeholder>
-- Software\\Microsoft\\Windows\\CurrentVersion\\Run\\
+- file output: <file-output-placeholder>
+- hashes: <hashes-placeholder>
+- strings (first 200 lines): <strings-placeholder>
+- sections/imports: <sections-imports-placeholder>
 
+Rules for this test:
+- Do not suggest executing the sample on a host system.
+- Do not invent artifacts or “unpacked files.”
+- Prefer small, single-purpose commands if you suggest evidence generation.
 
 ## Usage via agent tooling (Codex/other)
 
 Most agent systems will choose a skill based on the request and the skill’s metadata. You can also invoke it explicitly, for example:
 
 - Use **re-ioc-extraction** on this FLOSS output and produce a YAML list for hunting.
-- Extract IOCs from these sandbox logs; label confirmed vs candidate; include evidence snippets.
+- Extract IOCs from these sandbox logs; label confirmed vs candidate; include verbatim evidence snippets.
+- Use **re-unpacker** to assess whether this PE is packed; propose a static-first unpacking plan; document artifact provenance.
 
 ## Scope and safety
 
