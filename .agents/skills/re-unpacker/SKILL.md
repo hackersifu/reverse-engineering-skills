@@ -75,6 +75,8 @@ This skill can **check for** and **suggest installing** a lean set of tools. It 
 - avoid long one-liners
 - never install anything without explicit user approval
 - record tool presence/versions as evidence when provided
+- Tool installation/checks are allowed (with approval), but **must never include running the suspicious sample** as part of installation validation.
+
 
 ### Minimal tool set (lean)
 **Baseline (recommended):**
@@ -181,17 +183,36 @@ Example: UPX, some self-extracting formats.
 - Attempt: `upx -d "<sample>" -o "<sample>.unpacked"`
 - Validate with Step 2 commands again on `<sample>.unpacked`.
 
-#### 3.2 If static unpack is not feasible → dynamic/sandbox-only path
-This path requires:
-- an isolated VM/sandbox snapshot you can revert
-- no credentials, no sensitive mounts, no production network
-- ideally an instrumented sandbox
+#### 3.2 If static unpack is not feasible → dynamic/sandbox-only path (engineer decision required)
 
-Dynamic unpacking signals to look for:
-- RWX memory allocations followed by execution
+**PAUSE (execution gate):**
+Dynamic unpacking requires executing the sample. I will not proceed automatically.
+
+To continue, the engineer must explicitly approve:
+- execution in an isolated VM/sandbox (revertible snapshot)
+- networking posture (host-only / controlled egress)
+- logging/telemetry to capture (process, file, registry, memory events)
+- where artifacts will be stored and how they will be hashed
+
+Once approved, paste the sandbox outputs/telemetry here and I will:
+- identify the most likely “stub → payload” transition point from evidence
+- recommend *high-level* dump/extraction options supported by your tooling
+- validate unpacking success using static comparisons (strings/imports/capa deltas)
+
+### Engineer approval prompt (required before execution)
+If execution is needed, respond with:
+
+> **PAUSE:** Unpacking now requires executing the sample.  
+> Engineer: approve/deny running in sandbox. If approved, confirm VM snapshot exists, network posture, and what monitoring tools/logs you will capture.  
+> Then paste the outputs (process tree, events, memory/dump indicators) and I will proceed with an evidence-driven unpacking plan.
+
+
+**Dynamic signals to look for (evidence-based):**
+- RWX allocations + execution
 - decrypted code pages
-- “unpacking stubs” then a jump to a new region
-- child process injection / hollowing (Windows)
+- jump/transfer from stub to new region
+- injection/hollowing indicators (Windows)
+
 
 **Dynamic steps (high level, defensive)**
 - Run in sandbox with monitoring enabled.

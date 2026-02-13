@@ -21,7 +21,9 @@ Provide at least one of the following (more is better):
 
 If evidence is missing, the skill must still produce output for what is present and clearly note gaps.
 
-## Optional evidence generation (static only)
+## Optional evidence generation (static only, no execution)
+This skill must **not** execute the sample. If the user requests execution (or execution is required to obtain evidence), **pause and notify the engineer** to decide whether to proceed in a controlled sandbox.
+
 If the user asks for help generating evidence locally (or you are explicitly allowed to run commands), prefer **small, single-purpose commands** that are hard to break and easy to copy/paste.
 
 ### Command hygiene (important)
@@ -81,6 +83,16 @@ Use capa only as **supporting static context** (capabilities, packer/obfuscation
 4) Every IOC must be **traceable**: include a **verbatim** evidence snippet (exact line or tight excerpt) and the source artifact (strings/log/notes).
 5) **Stay on scope:** do not inspect unrelated environment files (shell dotfiles, configs) unless explicitly requested. Focus on the sample and provided evidence.
 6) **Do not “upgrade” indicators:** do not infer C2/persistence/stealer behavior into network IOCs unless the indicator values are present. Behavioral assessment is optional notes only.
+7) **No execution:** do not run the sample or trigger detonation. If execution is requested or required, **pause and notify the engineer** to decide (and require a controlled sandbox/VM).
+
+### Execution required — pause template
+If execution is requested/required, respond with:
+
+> **PAUSE:** This step would require executing an unknown sample. I will not proceed automatically.  
+> Please confirm (engineer decision) whether to run in a controlled sandbox/VM, and provide the sandbox constraints (networking, snapshotting, logging tools).  
+> If approved, paste sandbox outputs here and I will extract IOCs from the resulting evidence.
+
+
 
 ## IOC types to extract
 Extract only what is present in evidence. Common types include:
